@@ -56,6 +56,7 @@ class SREEnv(Environment):
 
     def _write_flask_app(self, task_level):
         """Generates the Flask server with the task hardcoded."""
+        # Note the double {{ }} for the jsonify parts!
         app_code = f"""from flask import Flask, jsonify
 import os
 import platform
@@ -74,9 +75,11 @@ def health():
         try:
             with open("src/config.py") as f:
                 if "bad_password" in f.read():
-                    return jsonify({"error": "DB Connection Failed"}), 500
+                    # FIXED: Added double braces here
+                    return jsonify({{"error": "DB Connection Failed"}}), 500
         except FileNotFoundError:
-            return jsonify({"error": "Config Missing"}), 500
+            # FIXED: Added double braces here
+            return jsonify({{"error": "Config Missing"}}), 500
                     
     if task == "hard":
         if platform.system() == "Windows":

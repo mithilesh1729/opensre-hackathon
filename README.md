@@ -1,6 +1,6 @@
 ---
-title: OpenSRE
-emoji: 🛠️
+title: OpenSRE Hackathon
+emoji: 🚀
 colorFrom: blue
 colorTo: green
 sdk: docker

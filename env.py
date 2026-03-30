@@ -109,10 +109,12 @@ if __name__ == '__main__':
                 f.write("DATABASE_URI = 'postgres://user:bad_password@localhost/db'\n")
                 
         elif task_level == "hard":
+            # UPDATED (Correct)
             for script in ["worker.py", "zombie.py"]:
-                with open(os.path.join(WORKSPACE_DIR, f"src/{{script}}"), "w") as f:
-                    f.write("import time\\nwhile True: time.sleep(1)\\n")
-                subprocess.Popen([sys.executable, f"src/{{script}}"], cwd=WORKSPACE_DIR)
+                # We want Python to insert the actual name 'worker.py', so use single { }
+                with open(os.path.join(WORKSPACE_DIR, f"src/{script}"), "w") as f:
+                    f.write("import time\nwhile True: time.sleep(1)\n")
+                subprocess.Popen([sys.executable, f"src/{script}"], cwd=WORKSPACE_DIR)
 
         self.server_process = subprocess.Popen([sys.executable, "flask_app.py"], cwd=WORKSPACE_DIR)
         time.sleep(2)

@@ -8,7 +8,7 @@ import sys
 from typing import Literal
 
 # RESTORED FOR HACKATHON VALIDATION
-from core.env_server import Environment
+from openenv.core.env_server import Environment
 from models import SREAction, SREObservation, SREReward, SREState
 
 WORKSPACE_DIR = "/tmp/opensre_workspace"

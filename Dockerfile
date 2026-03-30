@@ -23,5 +23,5 @@ COPY --chown=user . .
 # Expose the port
 EXPOSE 7860
 
-# Keep the Space alive safely without crashing on missing imports
-CMD ["python", "-m", "http.server", "7860", "--bind", "0.0.0.0"]
+# Start the FastAPI server
+CMD ["uvicorn", "app:app", "--host", "0.0.0.0", "--port", "7860"]

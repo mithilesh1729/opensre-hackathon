@@ -8,14 +8,11 @@ import sys
 from typing import Literal
 
 try:
-    # Try the most likely internal path
     from openenv.core.env_server import Environment
 except ImportError:
     try:
-        # Try a flatter import if the library version is different
         from openenv import Environment
     except ImportError:
-        # Emergency Fallback: Create a dummy class so the script doesn't crash
         class Environment:
             def __init__(self, *args, **kwargs): pass
             def reset(self, *args, **kwargs): return {}
@@ -25,7 +22,6 @@ from models import SREAction, SREObservation, SREReward, SREState
 
 WORKSPACE_DIR = "/tmp/opensre_workspace"
 
-# RESTORED INHERITANCE
 class SREEnv(Environment):
     def __init__(self):
         self._state = None
@@ -38,8 +34,7 @@ class SREEnv(Environment):
             try:
                 self.server_process.terminate()
                 self.server_process.wait(timeout=2)
-            except:
-                pass
+            except: pass
                 
         if platform.system() != "Windows":
             subprocess.run("pkill -f flask_app.py", shell=True, capture_output=True)
@@ -56,7 +51,6 @@ class SREEnv(Environment):
 
     def _write_flask_app(self, task_level):
         """Generates the Flask server with the task hardcoded."""
-        # Note the double {{ }} for the jsonify parts!
         app_code = f"""from flask import Flask, jsonify
 import os
 import platform
@@ -75,10 +69,8 @@ def health():
         try:
             with open("src/config.py") as f:
                 if "bad_password" in f.read():
-                    # FIXED: Added double braces here
                     return jsonify({{"error": "DB Connection Failed"}}), 500
         except FileNotFoundError:
-            # FIXED: Added double braces here
             return jsonify({{"error": "Config Missing"}}), 500
                     
     if task == "hard":
@@ -97,10 +89,6 @@ if __name__ == '__main__':
 """
         with open(os.path.join(WORKSPACE_DIR, "flask_app.py"), "w") as f:
             f.write(app_code)
-
-        restart_path = os.path.join(WORKSPACE_DIR, "restart.sh")
-        with open(restart_path, "w") as f:
-            f.write("#!/bin/bash\necho 'Restarting server...'\n")
 
     def reset(self, task_level: Literal["easy", "medium", "hard"] = "easy") -> SREObservation:
         self._setup_workspace()
@@ -122,81 +110,43 @@ if __name__ == '__main__':
                 
         elif task_level == "hard":
             for script in ["worker.py", "zombie.py"]:
-                with open(os.path.join(WORKSPACE_DIR, f"src/{script}"), "w") as f:
-                    f.write("import time\nwhile True: time.sleep(1)\n")
-                subprocess.Popen([sys.executable, f"src/{script}"], cwd=WORKSPACE_DIR)
+                with open(os.path.join(WORKSPACE_DIR, f"src/{{script}}"), "w") as f:
+                    f.write("import time\\nwhile True: time.sleep(1)\\n")
+                subprocess.Popen([sys.executable, f"src/{{script}}"], cwd=WORKSPACE_DIR)
 
-        self.server_process = subprocess.Popen(
-            [sys.executable, "flask_app.py"],
-            cwd=WORKSPACE_DIR
-        )
+        self.server_process = subprocess.Popen([sys.executable, "flask_app.py"], cwd=WORKSPACE_DIR)
         time.sleep(2)
-
-        return self._get_observation("SSH Login Successful. Type commands to debug.\n", "", 0, False)
-
-    def _check_health(self) -> int:
-        try:
-            response = requests.get("http://localhost:8080/health", timeout=2)
-            return response.status_code
-        except requests.exceptions.RequestException:
-            return 0 
+        return self._get_observation("SSH Login Successful. Type commands to debug.\\n", "", 0, False)
 
     def step(self, action: SREAction) -> tuple[SREObservation, SREReward, bool, dict]:
         self._state.step_count += 1
-        reward_val = -0.05
-        reasoning = "Standard step penalty."
+        reward_val, reasoning = -0.05, "Standard step penalty."
         cmd = action.command.strip()
         
-        if "rm -rf" in cmd:
-            reward_val -= 0.5
-            reasoning = "SEVERE PENALTY: Destructive command."
-        if any(bad in cmd for bad in ["/var", "apt", "sudo", "dpkg"]):
-            reward_val -= 0.3
-            reasoning = "PENALTY: Out of bounds."
-
         if "restart.sh" in cmd:
-            if self.server_process:
-                self.server_process.terminate()
-                self.server_process.wait(timeout=2)
+            if self.server_process: self.server_process.terminate()
             self.server_process = subprocess.Popen([sys.executable, "flask_app.py"], cwd=WORKSPACE_DIR)
-            time.sleep(2)
+            time.sleep(1)
             self._state.server_restarted = True
-            stdout, stderr, exit_code, action_error = "Server gracefully restarted.\n", "", 0, False
+            stdout, stderr, exit_code, action_error = "Server restarted.\\n", "", 0, False
         else:
             try:
-                result = subprocess.run(cmd, shell=True, cwd=WORKSPACE_DIR, timeout=5, capture_output=True, text=True)
-                stdout, stderr, exit_code = result.stdout, result.stderr, result.returncode
+                res = subprocess.run(cmd, shell=True, cwd=WORKSPACE_DIR, timeout=5, capture_output=True, text=True)
+                stdout, stderr, exit_code = res.stdout, res.stderr, res.returncode
                 action_error = False
-            except subprocess.TimeoutExpired:
-                stdout, stderr, exit_code, action_error = "", "TIMEOUT", 124, True
-                reward_val -= 0.5
+            except: stdout, stderr, exit_code, action_error = "", "ERROR", 1, True
 
-        if ("cat" in cmd or "ls" in cmd) and "error.log" in cmd and not self._state.discovered_log_file:
-            reward_val += 0.2
-            reasoning = "Good job! Inspected error logs."
-            self._state.discovered_log_file = True
+        health = 0
+        try: health = requests.get("http://localhost:8080/health", timeout=1).status_code
+        except: pass
 
-        health_status = self._check_health()
-        done = False
+        done = (health == 200 and self._state.server_restarted) or (self._state.step_count >= self._state.max_steps)
+        if health == 200 and self._state.server_restarted: reward_val, reasoning = 1.0, "SUCCESS!"
         
-        if health_status == 200 and self._state.server_restarted:
-            reward_val += 1.0
-            reasoning = "SUCCESS! Server health is 200 OK."
-            self._state.is_resolved = True
-            done = True
-        elif self._state.step_count >= self._state.max_steps:
-            reasoning = "FAILURE: Max steps reached."
-            done = True
-
-        self._state.score = max(0.0, min(1.0, self._state.score + reward_val))
-        return self._get_observation(stdout, stderr, exit_code, action_error, health_status), SREReward(value=reward_val, reasoning=reasoning), done, {}
+        return self._get_observation(stdout, stderr, exit_code, action_error, health), SREReward(value=reward_val, reasoning=reasoning), done, {}
 
     def _get_observation(self, stdout, stderr, exit_code, error, health=0):
-        return SREObservation(
-            stdout=stdout[:1500], stderr=stderr[:1500],
-            exit_code=exit_code, server_health_status=health, last_action_error=error
-        )
+        return SREObservation(stdout=stdout[:1500], stderr=stderr[:1500], exit_code=exit_code, server_health_status=health, last_action_error=error)
 
     @property
-    def state(self) -> SREState:
-        return self._state
+    def state(self) -> SREState: return self._state

@@ -5,10 +5,8 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "opensre-env"
 version = "1.0.0"
-description = "An autonomous SRE/DevOps environment where agents must troubleshoot, fix, and restart a broken web server via a simulated bash terminal."
-authors = [
-    {name = "Mithilesh"},
-]
+description = "Autonomous SRE/DevOps environment."
+authors = [{name = "Mithilesh"}]
 dependencies = [
     "fastapi",
     "uvicorn",
@@ -16,11 +14,17 @@ dependencies = [
     "openai",
     "flask",
     "requests",
+    "openenv-core>=0.2.0",
 ]
 requires-python = ">=3.10"
 
-[tool.setuptools]
-py-modules = ["env", "models", "inference", "app"]
+[project.scripts]
+# This is the 'server' entry point the validator is looking for
+server = "server.app:app"
 
 [project.entry-points."openenv.environments"]
 opensre = "env:SREEnv"
+
+[tool.setuptools]
+py-modules = ["env", "models", "inference"]
+packages = ["server"]

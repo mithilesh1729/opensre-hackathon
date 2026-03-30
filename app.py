@@ -2,7 +2,7 @@ from fastapi import FastAPI, Body
 from pydantic import BaseModel
 from typing import Optional
 
-# Safety Imports (Prevents silent crashes if library paths shift)
+# Safety Imports
 try:
     from env import SREEnv
     from models import SREAction
@@ -30,16 +30,22 @@ def reset(payload: Optional[ResetRequest] = Body(None)):
     return obs.model_dump() if hasattr(obs, "model_dump") else obs
 
 @app.post("/step")
-def step(action: Optional[dict] = Body(None)):
+def step(action_dict: Optional[dict] = Body(None)):
     if not env:
         return {"error": "Environment not initialized"}
-    # Flexible action handling
-    safe_action = action if action is not None else {}
-    obs, reward, done, info = env.step(safe_action)
+    
+    # 1. Convert the dictionary from the API into an SREAction object
+    # This is the "Bridge" that prevents the AttributeError
+    safe_dict = action_dict if action_dict is not None else {"command": "ls"}
+    action_obj = SREAction(**safe_dict)
+    
+    # 2. Pass the object to env.py
+    obs, reward, done, info = env.step(action_obj)
+    
     return {
         "observation": obs.model_dump() if hasattr(obs, "model_dump") else obs,
         "reward": reward.model_dump() if hasattr(reward, "model_dump") else reward,
-        "done": done
+        "done": bool(done)
     }
 
 @app.get("/state")

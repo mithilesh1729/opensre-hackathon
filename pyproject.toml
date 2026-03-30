@@ -19,8 +19,8 @@ dependencies = [
 requires-python = ">=3.10"
 
 [project.scripts]
-# This is the 'server' entry point the validator is looking for
-server = "server.app:app"
+# Change from server.app:app to server.app:main
+server = "server.app:main"
 
 [project.entry-points."openenv.environments"]
 opensre = "env:SREEnv"

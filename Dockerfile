@@ -23,5 +23,5 @@ COPY --chown=user . .
 # Expose the port
 EXPOSE 7860
 
-# Start the FastAPI server
-CMD ["uvicorn", "app:app", "--host", "0.0.0.0", "--port", "7860"]
+# Change the last line of your Dockerfile to this:
+CMD ["uvicorn", "server.app:app", "--host", "0.0.0.0", "--port", "7860"]

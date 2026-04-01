@@ -59,11 +59,12 @@ class SREState(BaseModel):
     step_count: int = Field(0, description="Number of actions taken so far.")
     max_steps: int = Field(15, description="Maximum allowed steps before episode termination.")
     
-    # Trackers for Reward Shaping (So we only reward them ONCE for a discovery)
+    # NEW: Track the last command for anti-spam penalties
+    last_command: str = Field("", description="The last command executed by the agent.")
+    
     discovered_log_file: bool = Field(False, description="Did the agent read the error log?")
     identified_rogue_pid: bool = Field(False, description="Did the agent run top/ps to find the zombie process?")
     server_restarted: bool = Field(False, description="Did the agent run the restart script?")
     
-    # Final Grader Check
     is_resolved: bool = Field(False, description="True if the GET /health check returns 200 OK.")
     score: float = Field(0.0, description="Cumulative score for the episode (0.0 to 1.0).")

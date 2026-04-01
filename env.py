@@ -115,7 +115,14 @@ if __name__ == '__main__':
                 with open(os.path.join(WORKSPACE_DIR, f"src/{script}"), "w") as f:
                     f.write("import time\nwhile True: time.sleep(1)\n")
                 subprocess.Popen([sys.executable, f"src/{script}"], cwd=WORKSPACE_DIR)
+        
+        # NEW: Write a real restart.sh script so the agent can inspect it
+        restart_script = "#!/bin/bash\necho 'Restarting server...'\npkill -f flask_app.py 2>/dev/null || true\nsleep 1\npython3 flask_app.py &\necho 'Server restarted.'\n"
+        with open(os.path.join(WORKSPACE_DIR, "restart.sh"), "w") as f:
+            f.write(restart_script)
+        os.chmod(os.path.join(WORKSPACE_DIR, "restart.sh"), 0o755)
 
+        # Start the server ONLY ONCE
         self.server_process = subprocess.Popen([sys.executable, "flask_app.py"], cwd=WORKSPACE_DIR)
         time.sleep(2)
         return self._get_observation("SSH Login Successful. Type commands to debug.\\n", "", 0, False)

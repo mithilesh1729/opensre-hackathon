@@ -129,9 +129,19 @@ if __name__ == '__main__':
 
     def step(self, action: SREAction) -> tuple[SREObservation, SREReward, bool, dict]:
         self._state.step_count += 1
-        reward_val, reasoning = -0.05, "Standard step penalty."
         cmd = action.command.strip()
         
+        # 1. Base Penalty (Time is money)
+        reward_val = -0.05
+        reasoning = "Standard step penalty."
+        
+        # 2. Anti-Spam Penalty (Don't let the agent loop blindly)
+        if cmd == self._state.last_command and cmd != "":
+            reward_val -= 0.05  # Extra penalty
+            reasoning = "Penalty: Repeated the exact same command."
+        self._state.last_command = cmd
+
+        # --- EXECUTE COMMAND ---
         if "restart.sh" in cmd:
             if self.server_process: self.server_process.terminate()
             self.server_process = subprocess.Popen([sys.executable, "flask_app.py"], cwd=WORKSPACE_DIR)
@@ -145,13 +155,35 @@ if __name__ == '__main__':
                 action_error = False
             except: stdout, stderr, exit_code, action_error = "", "ERROR", 1, True
 
+        # --- MILESTONE REWARDS (Dense Shaping) ---
+        # Reward them heavily the FIRST time they do the right diagnostic step
+        if self._state.task_level == "easy" and "logs/error.log" in cmd and not self._state.discovered_log_file:
+            reward_val += 0.2
+            reasoning = "Milestone: Discovered and inspected the error log!"
+            self._state.discovered_log_file = True
+            
+        if self._state.task_level == "hard" and any(x in cmd for x in ["ps", "top", "pgrep"]) and not self._state.identified_rogue_pid:
+            reward_val += 0.2
+            reasoning = "Milestone: Inspected running processes!"
+            self._state.identified_rogue_pid = True
+
+        # --- CHECK HEALTH ---
         health = 0
         try: health = requests.get("http://localhost:8080/health", timeout=1).status_code
         except: pass
 
         done = (health == 200 and self._state.server_restarted) or (self._state.step_count >= self._state.max_steps)
-        if health == 200 and self._state.server_restarted: reward_val, reasoning = 1.0, "SUCCESS!"
         
+        # --- 3. EFFICIENCY BONUS (The Game Changer) ---
+        if health == 200 and self._state.server_restarted:
+            base_success = 1.0
+            # If they solve it in under 10 steps, they get a bonus!
+            efficiency_bonus = max(0.0, (10 - self._state.step_count) * 0.05)
+            reward_val = base_success + efficiency_bonus
+            reasoning = f"SUCCESS! Base: +1.0 | Efficiency Bonus: +{efficiency_bonus:.2f}"
+            self._state.is_resolved = True
+            self._state.score = min(1.0, reward_val) # Cap at 1.0 for the grader
+
         return self._get_observation(stdout, stderr, exit_code, action_error, health), SREReward(value=reward_val, reasoning=reasoning), done, {}
 
     def _get_observation(self, stdout, stderr, exit_code, error, health=0):

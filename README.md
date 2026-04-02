@@ -5,35 +5,44 @@ colorFrom: blue
 colorTo: green
 sdk: docker
 pinned: false
+short_description: 'About OpenSRE: AI-Powered Server Debugging Environment'
 ---
+# OpenSRE: Autonomous DevOps & SRE Environment
 
-# 🛠️ OpenSRE: Autonomous DevOps Environment
+## 📖 Description & Motivation
+OpenSRE is a high-fidelity, real-world Site Reliability Engineering (SRE) simulation environment built for the Meta OpenEnv standard. Modern AI agents struggle with live server debugging because it requires exploring an opaque system, reading logs, and safely executing destructive commands (like `kill` or `rm`). 
 
-## 🚀 What Problem Does This Solve?
-This environment evaluates whether AI agents can autonomously diagnose and fix real-world server failures, mimicking the exact workflow and constraints of a human DevOps engineer.
+OpenSRE dynamically spins up a containerized Linux workspace and a live Flask server (`http://localhost:8080`). The agent is given an SSH-like terminal and must diagnose and resolve production-grade infrastructure failures.
 
-**OpenSRE** is a production-grade Reinforcement Learning environment built for the Meta OpenEnv Hackathon. It evaluates an AI agent's ability to act as a Site Reliability Engineer (SRE) by troubleshooting, fixing, and restarting a broken web server via a safe, simulated Bash terminal.
+## 🛠 Action and Observation Spaces
 
-## 🌟 Why OpenSRE? (Real-World Utility)
-Instead of toy games, OpenSRE simulates the exact multi-step reasoning required in enterprise DevOps:
-1. **Diagnosis:** Navigating file systems, reading logs, and inspecting process trees (`ps`, `top`).
-2. **Resolution:** Modifying config files or killing rogue background processes.
-3. **Validation:** Explicitly restarting the service (`./restart.sh`) to achieve a 200 OK health check.
+**Action Space:**
+The agent issues raw bash commands via the `SREAction` model. 
+* `command` (str): Any valid bash command (e.g., `cat logs/error.log`, `ps aux`, `bash restart.sh`).
 
-## 🎯 Task Progression
-* **Easy:** Disk Full Simulation. The server is crashing due to an oversized error log.
-* **Medium:** Bad Config. The database connection string contains a typo preventing boot.
-* **Hard:** Zombie Process. Multiple decoy processes run, but one specific zombie is starving the CPU. Agent must identify and `kill -9` the correct PID.
+**Observation Space (`SREObservation`):**
+* `stdout` (str): The standard output of the executed bash command.
+* `stderr` (str): Any error output from the shell.
+* `exit_code` (int): The shell return code.
+* `server_health_status` (int): The HTTP status code of the underlying web server (200 OK means resolved).
 
-## 🧠 Advanced RL Reward Shaping
-This environment goes beyond sparse binary rewards. It features anti-exploitation logic:
-* **Dense Exploration Signals:** +0.05 for exploring (`ls`, `cd`).
-* **Milestone Rewards:** +0.2 for successfully finding and reading the correct error log.
-* **Anti-Farming Penalties:** -0.02 if the agent repeatedly cats the same log file after discovering it.
-* **Destructive Penalties:** -0.5 for using `rm -rf` or crashing the execution sandbox.
+## 🚀 Tasks & Difficulty Progression
+OpenSRE features 3 procedurally injected scenarios alongside benign "decoy" files and processes to prevent LLM memorization.
 
-## 🚀 Running the Baseline
-Ensure you have set `HF_TOKEN`, `API_BASE_URL`, and `MODEL_NAME`.
+1.  **Easy (Disk Full):** A massive `error.log` is causing the server to crash. The agent must find it among decoy logs and delete it.
+2.  **Medium (Bad Configuration):** The database connection string in `src/config.py` contains a typo (`bad_password`). The agent must use tools like `sed` to fix the file.
+3.  **Hard (Rogue Zombie Process):** A `zombie.py` process is hogging CPU resources. The agent must use `ps` or `pgrep`, identify the correct PID amongst healthy background workers, `kill` it, and restart the server.
+
+## 🏆 Reward Shaping (Grader Logic)
+OpenSRE uses an advanced, deterministic Dense Reward system:
+* **Success:** Agent achieves HTTP 200 on the `/health` endpoint (+1.0).
+* **Efficiency Bonus:** Bonus points awarded if the agent solves the task in under 10 steps.
+* **Milestone Rewards:** +0.20 for correct diagnostic steps (e.g., reading logs, checking process trees).
+* **Penalties:** -0.05 step penalty, and additional penalties for spamming identical commands.
+
+## ⚙️ Setup & Usage
+
+**1. Install Dependencies:**
 ```bash
-python3 inference.py
-```
+pip install -r requirements.txt
+pip install openenv-core

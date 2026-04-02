@@ -1,108 +1,122 @@
 import os
 import json
+import requests
+import time
 from openai import OpenAI
-from env import SREEnv
-from models import SREAction
 
-# MANDATORY HACKATHON VARIABLES
-API_BASE_URL = os.getenv("API_BASE_URL", "https://api.openai.com/v1")
-MODEL_NAME = os.getenv("MODEL_NAME", "gpt-4o-mini")
-HF_TOKEN = os.getenv("HF_TOKEN")
+# ==========================================
+# 1. PRE-SUBMISSION CHECKLIST: ENVIRONMENT VARIABLES
+# ==========================================
+API_BASE_URL = os.environ.get("API_BASE_URL", "https://api.openai.com/v1")
+MODEL_NAME = os.environ.get("MODEL_NAME", "gpt-4o-mini")
+HF_TOKEN = os.environ.get("HF_TOKEN", os.environ.get("OPENAI_API_KEY", ""))
 
+# ==========================================
+# 2. PRE-SUBMISSION CHECKLIST: OPENAI CLIENT
+# ==========================================
 client = OpenAI(
     base_url=API_BASE_URL,
-    api_key=HF_TOKEN or "dummy_key_for_local_testing",
+    api_key=HF_TOKEN if HF_TOKEN else "dummy-key-for-local"
 )
 
-SYSTEM_PROMPT = """You are debugging a simulated server inside a restricted workspace.
+# Configuration for your OpenSRE 2.0 Environment
+ENV_URL = "http://127.0.0.1:7860"
 
-IMPORTANT RULES:
-- You are NOT in a real global Linux system.
-- DO NOT use /var/log, apt-get, sudo, or dpkg.
-- All files are inside the current local directory.
-- Logs are in: logs/error.log
-- Config is in: src/config.py
-- To apply fixes, you MUST restart the server using: bash restart.sh
-
-EXAMPLES OF VALID COMMANDS:
-ls -la
-cat logs/error.log
-rm logs/error.log
-ps aux
-pkill -f zombie.py
-sed -i 's/bad_password/good_password/g' src/config.py
-bash restart.sh
-
-You MUST respond ONLY with valid JSON matching this schema. Do not add markdown or explanations.
-{"command": "your_bash_command_here"}"""
-
-def parse_model_action(response_text: str) -> str:
-    """Safely extracts the bash command."""
+def parse_action(response_text):
+    """Extracts the bash command from the LLM's JSON output."""
     try:
-        clean_text = response_text.replace("```json", "").replace("```", "").strip()
-        start = clean_text.find('{')
-        end = clean_text.rfind('}') + 1
+        start = response_text.find('{')
+        end = response_text.rfind('}') + 1
         if start != -1 and end != -1:
-            clean_text = clean_text[start:end]
-        parsed = json.loads(clean_text)
-        return parsed.get("command", "echo 'JSON Parse Error'")
-    except Exception:
-        print(f"[!] JSON Parse Error on raw text: {response_text}")
-        return "echo 'LLM output was not valid JSON'"
+            data = json.loads(response_text[start:end])
+            return data.get("command", "ls")
+    except:
+        pass
+    return "ls"
 
-def run_task(env: SREEnv, task_level: str):
-    print(f"\n{'='*50}\n🚀 STARTING TASK: {task_level.upper()}\n{'='*50}")
-    obs = env.reset(task_level=task_level)
+def run_evaluation(task_level):
+    """Runs a single episode and strictly formats the output logs."""
     
-    messages = [
-        {"role": "system", "content": SYSTEM_PROMPT},
-        {"role": "user", "content": f"Initial Login STDOUT:\n{obs.stdout}"}
-    ]
+    # ==========================================
+    # 3. PRE-SUBMISSION CHECKLIST: [START] LOG
+    # ==========================================
+    print(f"[START] Task: {task_level}")
 
+    # Initialize environment and get session
+    try:
+        res = requests.post(f"{ENV_URL}/reset", json={"task_level": task_level}).json()
+    except Exception as e:
+        print(f"Error connecting to OpenSRE: {e}")
+        return
+
+    session_id = res.get("session_id", "default")
+    stdout_text = res.get("stdout", "Terminal Ready.")
+    
     done = False
-    step = 0
+    step_count = 0
+    history = []
+    final_score = 0.0
 
-    while not done:
-        step += 1
+    while not done and step_count < 15:
+        step_count += 1
         
+        # True "Smart Agent" ReAct Prompt
+        system_prompt = """You are an autonomous Site Reliability Engineer. 
+You must fix the broken web server.
+Always output a valid JSON object with two keys:
+1. "thought": Your reasoning based on the terminal output.
+2. "command": The exact bash command to execute."""
+
+        user_prompt = f"Terminal Output:\n{stdout_text[:1500]}\nPast Commands:\n{history}\nWhat is your next command?"
+
+        # LLM Call
         try:
-            completion = client.chat.completions.create(
+            response = client.chat.completions.create(
                 model=MODEL_NAME,
-                messages=messages,
-                temperature=0.1, 
-                max_tokens=150,
+                messages=[
+                    {"role": "system", "content": system_prompt},
+                    {"role": "user", "content": user_prompt}
+                ],
+                temperature=0.1
             )
-            response_text = completion.choices[0].message.content or ""
-        except Exception as exc:
-            # FIXED: Safe fallback without crashing the environment
-            print(f"API Error: {exc}")
-            response_text = '{"command": "ls"}'
+            raw_reply = response.choices[0].message.content
+            cmd = parse_action(raw_reply)
+        except Exception as e:
+            cmd = "ls" # Fallback if API quota fails
 
-        command_str = parse_model_action(response_text)
-        print(f"Step {step} | Agent ➡️  {command_str}")
+        history.append(cmd)
+
+        # ==========================================
+        # 4. PRE-SUBMISSION CHECKLIST: [STEP] LOG
+        # ==========================================
+        print(f"[STEP] {step_count} | {cmd}")
+
+        # Execute in Sandbox
+        step_res = requests.post(f"{ENV_URL}/step", json={
+            "command": cmd, 
+            "session_id": session_id
+        }).json()
         
-        obs, reward, done, _ = env.step(SREAction(command=command_str))
+        obs = step_res.get("observation", {})
+        reward = step_res.get("reward", {})
+        done = step_res.get("done", True)
         
-        status_color = "🟢 OK" if obs.server_health_status == 200 else "🔴 DOWN"
-        print(f"  ↳ Reward: {reward.value:+.2f} | Health: {obs.server_health_status} {status_color} | Reason: {reward.reasoning}")
+        stdout_text = obs.get("stdout", "") + "\n" + obs.get("stderr", "")
+        
+        # In case the episode finishes, grab the latest score
+        # Note: If you want to fetch the exact score, you might need a /state endpoint
+        # For logging purposes, we'll track the last reward value.
+        final_score = reward.get("value", 0.0)
 
-        messages.append({"role": "assistant", "content": response_text})
-        obs_text = f"STDOUT:\n{obs.stdout[:500]}\nSTDERR:\n{obs.stderr[:500]}\nEXIT CODE: {obs.exit_code}\nHEALTH: {obs.server_health_status}"
-        messages.append({"role": "user", "content": obs_text})
-
-    print(f"🏁 Task '{task_level}' Complete. Final Score: {env.state.score}/1.0")
-    return env.state.score
+    # ==========================================
+    # 5. PRE-SUBMISSION CHECKLIST: [END] LOG
+    # ==========================================
+    print(f"[END] Task: {task_level} | Final Score: {final_score}")
 
 if __name__ == "__main__":
-    env = SREEnv()
-    tasks = ["easy", "medium", "hard"]
-    scores = {}
+    # Give the FastAPI server a second to boot if starting concurrently
+    time.sleep(2)
     
-    for task in tasks:
-        scores[task] = run_task(env, task)
-        
-    print("\n" + "="*50)
-    print("🏆 OPEN SRE BASELINE EVALUATION COMPLETE")
-    for t, s in scores.items():
-        print(f" - {t.capitalize()}: {s}/1.0")
-    print("="*50)
+    for level in ["easy", "medium", "hard"]:
+        run_evaluation(level)
+        print("-" * 40)

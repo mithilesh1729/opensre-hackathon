@@ -46,3 +46,18 @@ OpenSRE uses an advanced, deterministic Dense Reward system:
 ```bash
 pip install -r requirements.txt
 pip install openenv-core
+
+
+**2. Run the Baseline Evaluation:**
+Ensure you have exported your API credentials as per the OpenEnv spec:
+
+```bash
+export MODEL_NAME="gpt-4o-mini"
+export HF_TOKEN="your_openai_api_key_here"
+python3 inference.py
+
+
+## 📊 Baseline Scores (GPT-4o-mini)
+* **Easy:** 1.0 / 1.0
+* **Medium:** 0.95 / 1.0 (Average)
+* **Hard:** 0.85 / 1.0 (Average - occasionally struggles with complex `sed` syntax)

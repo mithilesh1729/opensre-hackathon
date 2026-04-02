@@ -101,20 +101,37 @@ if __name__ == '__main__':
         )
 
         if task_level == "easy":
+            # THE CULPRIT: The massive file causing the "Disk Full" crash
             with open(os.path.join(WORKSPACE_DIR, "logs/error.log"), "w") as f:
                 f.write("ERROR: OUT OF MEMORY\n" * 5000)
+            
+            # DECOYS: Normal, harmless log files to distract the agent
+            with open(os.path.join(WORKSPACE_DIR, "logs/access.log"), "w") as f:
+                f.write("127.0.0.1 - - [02/Apr/2026 10:00:00] \"GET /health HTTP/1.1\" 200 OK\n" * 20)
+            with open(os.path.join(WORKSPACE_DIR, "logs/system.log"), "w") as f:
+                f.write("INFO: System initialized safely.\nINFO: Background workers started.\n")
                 
         elif task_level == "medium":
+            # THE CULPRIT: The bad connection string
             with open(os.path.join(WORKSPACE_DIR, "src/config.py"), "w") as f:
                 f.write("DATABASE_URI = 'postgres://user:bad_password@localhost/db'\n")
+            
+            # DECOYS: Valid Python files that don't need fixing
+            with open(os.path.join(WORKSPACE_DIR, "src/utils.py"), "w") as f:
+                f.write("def parse_data(data):\n    return data.strip()\n")
                 
         elif task_level == "hard":
-            # UPDATED (Correct)
-            for script in ["worker.py", "zombie.py"]:
-                # We want Python to insert the actual name 'worker.py', so use single { }
+            # DECOYS: Harmless background workers that sleep (simulate normal operations)
+            for i in range(1, 4):
+                script = f"worker_{i}.py"
                 with open(os.path.join(WORKSPACE_DIR, f"src/{script}"), "w") as f:
-                    f.write("import time\nwhile True: time.sleep(1)\n")
+                    f.write("import time\nwhile True: time.sleep(10)\n")
                 subprocess.Popen([sys.executable, f"src/{script}"], cwd=WORKSPACE_DIR)
+            
+            # THE CULPRIT: The rogue zombie process that the agent MUST kill
+            with open(os.path.join(WORKSPACE_DIR, "src/zombie.py"), "w") as f:
+                f.write("import time\nwhile True: pass  # Simulating a CPU spike\n")
+            subprocess.Popen([sys.executable, "src/zombie.py"], cwd=WORKSPACE_DIR)
         
         # NEW: Write a real restart.sh script so the agent can inspect it
         restart_script = "#!/bin/bash\necho 'Restarting server...'\npkill -f flask_app.py 2>/dev/null || true\nsleep 1\npython3 flask_app.py &\necho 'Server restarted.'\n"

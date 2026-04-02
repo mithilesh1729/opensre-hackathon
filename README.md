@@ -60,7 +60,5 @@ python3 inference.py
 
 📊 Baseline Scores (GPT-4o-mini)
 Easy: 1.0 / 1.0
-
 Medium: 0.95 / 1.0 (Average)
-
 Hard: 0.85 / 1.0 (Average - occasionally struggles with complex sed syntax)

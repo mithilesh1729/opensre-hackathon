@@ -186,20 +186,27 @@ if __name__ == '__main__':
 
         # --- CHECK HEALTH ---
         health = 0
-        try: health = requests.get("http://localhost:8080/health", timeout=1).status_code
-        except: pass
+        try: 
+            health = requests.get("http://localhost:8080/health", timeout=1).status_code
+        except: 
+            pass
 
         done = (health == 200 and self._state.server_restarted) or (self._state.step_count >= self._state.max_steps)
         
-        # --- 3. EFFICIENCY BONUS (The Game Changer) ---
+        # --- 3. EFFICIENCY BONUS & STRICT BOUNDING ---
         if health == 200 and self._state.server_restarted:
             base_success = 1.0
-            # If they solve it in under 10 steps, they get a bonus!
             efficiency_bonus = max(0.0, (10 - self._state.step_count) * 0.05)
-            reward_val = base_success + efficiency_bonus
-            reasoning = f"SUCCESS! Base: +1.0 | Efficiency Bonus: +{efficiency_bonus:.2f}"
+            
+            # STRICT BOUND: Step reward cannot exceed 1.0
+            reward_val = min(1.0, base_success + efficiency_bonus)
+            reasoning = f"SUCCESS! Terminal Reward: +{reward_val:.2f}"
+            
             self._state.is_resolved = True
-            self._state.score = min(1.0, reward_val) # Cap at 1.0 for the grader
+            self._state.score = 1.0 # Final episode score locked at absolute max
+            
+        elif done and not self._state.is_resolved:
+            self._state.score = 0.0 # Floor the score on failure
 
         return self._get_observation(stdout, stderr, exit_code, action_error, health), SREReward(value=reward_val, reasoning=reasoning), done, {}
 

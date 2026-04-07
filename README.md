@@ -54,6 +54,21 @@ cd opensre-hackathon
 pip install -r requirements.txt
 
 
+### 2. Run the Environment Server
+The server features UUID session isolation (/step?session_id=...) allowing for parallel automated evaluation without state corruption.
+
+```bash
+python server/app.py
+
+
+### 3. Run the Evaluation
+Ensure you have your Hugging Face or OpenAI token exported.
+
+```bash
+export HF_TOKEN="your_token_here"
+python inference.py
+
+
 ## 📊 Baseline Scores
 Evaluated using a baseline ReAct (Reasoning + Acting) loop with `gpt-4o-mini`. 
 *(Note: Scores are bounded between 0.01 and 0.99)*

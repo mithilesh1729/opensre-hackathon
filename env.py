@@ -185,6 +185,7 @@ if __name__ == '__main__':
             self._state.identified_rogue_pid = True
 
         # --- CHECK HEALTH ---
+        # --- CHECK HEALTH ---
         health = 0
         try: 
             health = requests.get("http://localhost:8080/health", timeout=1).status_code
@@ -195,18 +196,18 @@ if __name__ == '__main__':
         
         # --- 3. EFFICIENCY BONUS & STRICT BOUNDING ---
         if health == 200 and self._state.server_restarted:
-            base_success = 1.0
+            base_success = 0.99  # CRITICAL: Not 1.0
             efficiency_bonus = max(0.0, (10 - self._state.step_count) * 0.05)
             
-            # STRICT BOUND: Step reward cannot exceed 1.0
-            reward_val = min(1.0, base_success + efficiency_bonus)
+            # STRICT BOUND: Step reward cannot exceed 0.99
+            reward_val = min(0.99, base_success + efficiency_bonus)
             reasoning = f"SUCCESS! Terminal Reward: +{reward_val:.2f}"
             
             self._state.is_resolved = True
-            self._state.score = 1.0 # Final episode score locked at absolute max
+            self._state.score = 0.99 # CRITICAL: Locked below 1.0
             
         elif done and not self._state.is_resolved:
-            self._state.score = 0.0 # Floor the score on failure
+            self._state.score = 0.01 # CRITICAL: Floored strictly above 0.0
 
         return self._get_observation(stdout, stderr, exit_code, action_error, health), SREReward(value=reward_val, reasoning=reasoning), done, {}
 

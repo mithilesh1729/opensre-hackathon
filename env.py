@@ -158,6 +158,7 @@ if __name__ == '__main__':
             reasoning = "Penalty: Repeated the exact same command."
         self._state.last_command = cmd
 
+
         # --- EXECUTE COMMAND ---
         if "restart.sh" in cmd:
             if self.server_process: self.server_process.terminate()
